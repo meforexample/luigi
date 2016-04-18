@@ -271,12 +271,30 @@ local function createDefaultKeyActions (self)
         ['tab'] = function () return true end,
         ['backspace'] = function ()
             if not deleteRange(self) then
-                deleteCharacterLeft(self)
+                if isCommandOrCtrlPressed() then
+                    if isShiftPressed() then
+                        moveLineLeft(self, isShiftPressed())
+                    else
+                        moveWordLeft(self, true)
+                    end
+                    deleteRange(self)
+                else
+                    deleteCharacterLeft(self)
+                end
             end
         end,
         ['delete'] = function ()
             if not deleteRange(self) then
-                deleteCharacterRight(self)
+                if isCommandOrCtrlPressed() then
+                    if isShiftPressed() then
+                        moveLineRight(self, isShiftPressed())
+                    else
+                        moveWordRight(self, true)
+                    end
+                    deleteRange(self)
+                else
+                    deleteCharacterRight(self)
+                end
             end
         end,
         ['left'] = function ()
