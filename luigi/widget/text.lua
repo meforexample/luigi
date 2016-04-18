@@ -154,6 +154,7 @@ local function deleteRange (self)
         local index = #left
         self.value = left .. text:sub(last + 1)
         selectRange(self, index, index)
+        addHistoryState(self)
         return true
     end
 end
@@ -212,6 +213,7 @@ local function pasteFromClipboard (self)
     local index = #left
     self.value = left .. text:sub(last + 1)
     selectRange(self, index, index)
+    addHistoryState(self)
 end
 
 local function insertText (self, newText)
@@ -222,10 +224,58 @@ local function insertText (self, newText)
     local index = #left
     self.value = left .. text:sub(last + 1)
     selectRange(self, index, index)
+    if newText == " " then
+        addHistoryState(self)
+    end
 end
 
 local function isShiftPressed ()
     return Backend.isKeyDown('lshift', 'rshift')
+end
+
+local function Undo(self)
+    local ptable = {}
+    if table.maxn(self.history) > 0 then
+        for k,v in pairs(self.history) do
+            ptable[k - 1] = v
+        end
+        self.history = ptable
+    end
+    self.value = self.history[0]
+end
+
+local function Redo(self)
+    local minn = function(T) -- auxiliary function to determine smallest non positive index of table. Vice versa to table.maxn
+        local c = table.maxn(T)
+        for k,v in pairs(T) do
+            if k < c then c = k end
+        end
+        return c
+    end
+    -- function body
+    local ptable = {}
+    if minn(self.history) < 0 then
+        for k,v in pairs(self.history) do
+            ptable[k + 1] = v
+        end
+        self.history = ptable
+    end
+    self.value = self.history[0]
+end
+
+function addHistoryState(self)
+    local cleanup_history = function()
+        local ptable = {}
+        for k,v in pairs(self.history) do
+            if (k >= 0) and (k < self.maxHistory) then ptable[k] = v end
+        end
+        self.history = ptable
+    end
+    if self.value ~= self.history[0] then
+        table.insert(self.history, 0, self.value)
+    end
+    cleanup_history()
+    print_table(self.history)
 end
 
 -- check command (gui) key, only on Mac.
@@ -321,6 +371,19 @@ local function createDefaultKeyActions (self)
         ['end'] = function ()
             moveLineRight(self, isShiftPressed())
         end,
+        ['z'] = function ()
+            if isCommandOrCtrlPressed() then
+                Undo(self)
+            end
+        end,
+        ['undo'] = function ()
+                Undo(self)
+        end,
+        ['y'] = function ()
+            if isCommandOrCtrlPressed() then
+                Redo(self)
+            end
+        end,
         ['x'] = function ()
             if isCommandOrCtrlPressed() then
                 copyRangeToClipboard(self)
@@ -370,6 +433,8 @@ return function (self)
     self.value = tostring(self.value or self.text or '')
     self.text = ''
     self.keyActions = createDefaultKeyActions(self)
+    self.history = {}
+    self.maxHistory = 10
 
 --[[--
 Special Attributes
@@ -439,6 +504,11 @@ This color is used to indicate the selected range of text.
             if Backend.getTime() % 2 < 1.75 then
                 Backend.setColor(color)
                 Backend.drawRectangle('fill', endX, y, 1, height)
+            end
+            local deltatime = Backend.getTime() - (ftime or 0)
+            if deltatime > 1.5 then -- sync once in 1.5 second undo history
+                ftime = Backend.getTime()
+                addHistoryState(self)
             end
         else
             Backend.setColor { color[1], color[2], color[3],
